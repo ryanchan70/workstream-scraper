@@ -1,0 +1,14 @@
+# Ignore daily recording logs
+daily_recording_log_*.txt
+
+# Ignore operator session scrapings
+operator_sessions_*.txt
+
+# Fallback: Ignore any stray logs or text files in the root folder
+*.txt
+*.log
+
+# Ignore local system/IDE cache files
+.DS_Store
+__pycache__/
+*.pyc
