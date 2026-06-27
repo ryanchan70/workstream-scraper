@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fleet Monitor Control Panel</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Geist+Mono:wght@400;600&display=swap">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #111827;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 30px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 25px;
+        }
+
+        @media (min-width: 992px) {
+            .container { grid-template-columns: 3fr 2fr; }
+            .full-width { grid-column: span 2; }
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        button {
+            font-family: 'Inter', sans-serif;
+            padding: 12px 24px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #ffffff;
+        }
+
+        button:active { transform: scale(0.98); }
+        .btn-start { background-color: var(--accent-green); }
+        .btn-start:hover { background-color: #059669; box-shadow: 0 0 12px rgba(16,185,129,0.3); }
+        .btn-stop { background-color: var(--accent-red); }
+        .btn-stop:hover { background-color: #dc2626; box-shadow: 0 0 12px rgba(239,68,68,0.3); }
+        .btn-snapshot { background-color: var(--accent-blue); }
+        .btn-snapshot:hover { background-color: #2563eb; box-shadow: 0 0 12px rgba(59,130,246,0.3); }
+
+        .loop-status {
+            font-size: 0.85rem;
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 6px;
+            float: right;
+        }
+        .status-on { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+        .status-off { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+
+        .terminal-box {
+            background-color: #030712;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            font-family: 'Geist Mono', monospace;
+            font-size: 0.85rem;
+            padding: 20px;
+            height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            color: #d1d5db;
+        }
+
+        /* Generated ANSI Color Parsing Styles */
+        .ansi-red { color: #f87171; }
+        .ansi-yellow { color: #fbbf24; }
+        .ansi-green { color: #34d399; }
+        .ansi-blue { color: #60a5fa; }
+        .ansi-purple { color: #c084fc; }
+        .ansi-bold { font-weight: bold; }
+        .ansi-underline { text-decoration: underline; }
+        .ansi-bg-red { background-color: #7f1d1d; color: #ffffff; padding: 2px 4px; border-radius: 4px; }
+        .ansi-bg-yellow { background-color: #78350f; color: #ffffff; padding: 2px 4px; border-radius: 4px; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #1f2937;
+        }
+
+        th {
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        .time-badge {
+            font-family: 'Geist Mono', monospace;
+            background-color: #1f2937;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            color: var(--accent-blue);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="full-width">
+        <h1 style="margin: 0 0 5px 0; font-size: 1.8rem;">ShiftIQ Fleet Monitor Console</h1>
+        <p style="color: var(--text-muted); margin: 0; font-size: 0.95rem;">Direct console output stream and automatic log timing calculations.</p>
+    </div>
+
+    <div class="card">
+        <div style="margin-bottom: 15px; overflow: hidden;">
+            <span id="loop-status" class="loop-status status-on">LOOP ACTIVE</span>
+            <h2 style="margin: 0; font-size: 1.2rem;">Live Terminal Text Dump</h2>
+        </div>
+        
+        <div class="controls-grid">
+            <button class="btn-start" onclick="sendControl('/start')">Start Python Script</button>
+            <button class="btn-stop" onclick="sendControl('/stop')">Stop Python Script</button>
+            <button class="btn-snapshot" onclick="sendControl('/snapshot')">Snapshot File Output</button>
+        </div>
+
+        <div id="terminal" class="terminal-box">Awaiting terminal interface hook connection...</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 25px;">
+        <div class="card">
+            <h2 style="margin: 0; font-size: 1.2rem;">Ranked Pi Timings</h2>
+            <table>
+                <thead><tr><th>#</th><th>Rig Label</th><th style="text-align: right;">Total Active Duration</th></tr></thead>
+                <tbody id="pi-rankings"><tr><td colspan="3" style="color: var(--text-muted);">Awaiting loop cycle data...</td></tr></tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2 style="margin: 0; font-size: 1.2rem;">Ranked Operator Timings</h2>
+            <table>
+                <thead><tr><th>#</th><th>Operator Name</th><th style="text-align: right;">Total Active Duration</th></tr></thead>
+                <tbody id="operator-rankings"><tr><td colspan="3" style="color: var(--text-muted);">Awaiting loop cycle data...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    function parseAnsi(text) {
+        // Simple fast escape code to clean HTML injection safety converter
+        let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        
+        // Match specific ANSI code maps compiled inside fleet_monitor.py
+        html = html.replace(/\033\[91m\033\[1m\033\[4m([\s\S]*?)\033\[0m/g, '<span class="ansi-red ansi-bold ansi-underline">$1</span>');
+        html = html.replace(/\033\[43m\033\[30m\033\[1m\033\[4m\033\[5m([\s\S]*?)\033\[0m/g, '<span class="ansi-bg-yellow ansi-bold">$1</span>');
+        html = html.replace(/\033\[41m\033\[97m\033\[1m\033\[4m\033\[5m([\s\S]*?)\033\[0m/g, '<span class="ansi-bg-red ansi-bold">$1</span>');
+        html = html.replace(/\033\[91m/g, '<span class="ansi-red">').replace(/\033\[93m/g, '<span class="ansi-yellow">');
+        html = html.replace(/\033\[92m/g, '<span class="ansi-green">').replace(/\033\[94m/g, '<span class="ansi-blue">');
+        html = html.replace(/\033\[96m/g, '<span class="ansi-blue">').replace(/\033\[95m/g, '<span class="ansi-purple">');
+        html = html.replace(/\033\[0m/g, '</span>');
+        
+        return html;
+    }
+
+    async function sendControl(endpoint) {
+        try { await fetch(endpoint); fetchUpdates(); } catch (e) { console.error("Control failed", e); }
+    }
+
+    async function fetchUpdates() {
+        try {
+            const logRes = await fetch('/logs');
+            const logs = await logRes.json();
+            const terminalEl = document.getElementById('terminal');
+            
+            // Build parsed line outputs
+            terminalEl.innerHTML = logs.map(l => parseAnsi(l)).join('\n');
+            terminalEl.scrollTop = terminalEl.scrollHeight;
+
+            const rankRes = await fetch('/rankings');
+            const data = await rankRes.json();
+
+            const statusEl = document.getElementById('loop-status');
+            if (data.active) {
+                statusEl.textContent = "LOOP ACTIVE";
+                statusEl.className = "loop-status status-on";
+            } else {
+                statusEl.textContent = "LOOP PAUSED";
+                statusEl.className = "loop-status status-off";
+            }
+
+            document.getElementById('pi-rankings').innerHTML = data.pi.length ? data.pi.map((p, i) => 
+                `<tr><td>${i+1}</td><td><strong>${p.name}</strong></td><td style="text-align: right;"><span class="time-badge">${p.duration}</span></td></tr>`
+            ).join('') : '<tr><td colspan="3" style="color:var(--text-muted)">No metrics recorded today.</td></tr>';
+
+            document.getElementById('operator-rankings').innerHTML = data.operator.length ? data.operator.map((o, i) => 
+                `<tr><td>${i+1}</td><td><strong>${o.name}</strong></td><td style="text-align: right;"><span class="time-badge">${o.duration}</span></td></tr>`
+            ).join('') : '<tr><td colspan="3" style="color:var(--text-muted)">No metrics recorded today.</td></tr>';
+
+        } catch (e) { console.error("Update sync error", e); }
+    }
+
+    setInterval(fetchUpdates, 2000);
+    fetchUpdates();
+</script>
+</body>
+</html>
