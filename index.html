@@ -96,7 +96,6 @@
             color: #d1d5db;
         }
 
-        /* Generated ANSI Color Parsing Styles */
         .ansi-red { color: #f87171; }
         .ansi-yellow { color: #fbbf24; }
         .ansi-green { color: #34d399; }
@@ -142,12 +141,12 @@
 <div class="container">
     <div class="full-width">
         <h1 style="margin: 0 0 5px 0; font-size: 1.8rem;">ShiftIQ Fleet Monitor Console</h1>
-        <p style="color: var(--text-muted); margin: 0; font-size: 0.95rem;">Direct console output stream and automatic log timing calculations.</p>
+        <p style="color: var(--text-muted); margin: 0; font-size: 0.95rem;">GitHub Pages Decoupled Control Terminal.</p>
     </div>
 
     <div class="card">
         <div style="margin-bottom: 15px; overflow: hidden;">
-            <span id="loop-status" class="loop-status status-on">LOOP ACTIVE</span>
+            <span id="loop-status" class="loop-status status-off">CONNECTING...</span>
             <h2 style="margin: 0; font-size: 1.2rem;">Live Terminal Text Dump</h2>
         </div>
         
@@ -157,7 +156,7 @@
             <button class="btn-snapshot" onclick="sendControl('/snapshot')">Snapshot File Output</button>
         </div>
 
-        <div id="terminal" class="terminal-box">Awaiting terminal interface hook connection...</div>
+        <div id="terminal" class="terminal-box">Connecting to local rig metrics hook on http://localhost:8080...</div>
     </div>
 
     <div style="display: flex; flex-direction: column; gap: 25px;">
@@ -180,11 +179,11 @@
 </div>
 
 <script>
+    // Point directly to your active local execution thread
+    const API_BASE = "http://localhost:8080";
+
     function parseAnsi(text) {
-        // Simple fast escape code to clean HTML injection safety converter
         let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        
-        // Match specific ANSI code maps compiled inside fleet_monitor.py
         html = html.replace(/\033\[91m\033\[1m\033\[4m([\s\S]*?)\033\[0m/g, '<span class="ansi-red ansi-bold ansi-underline">$1</span>');
         html = html.replace(/\033\[43m\033\[30m\033\[1m\033\[4m\033\[5m([\s\S]*?)\033\[0m/g, '<span class="ansi-bg-yellow ansi-bold">$1</span>');
         html = html.replace(/\033\[41m\033\[97m\033\[1m\033\[4m\033\[5m([\s\S]*?)\033\[0m/g, '<span class="ansi-bg-red ansi-bold">$1</span>');
@@ -192,25 +191,23 @@
         html = html.replace(/\033\[92m/g, '<span class="ansi-green">').replace(/\033\[94m/g, '<span class="ansi-blue">');
         html = html.replace(/\033\[96m/g, '<span class="ansi-blue">').replace(/\033\[95m/g, '<span class="ansi-purple">');
         html = html.replace(/\033\[0m/g, '</span>');
-        
         return html;
     }
 
     async function sendControl(endpoint) {
-        try { await fetch(endpoint); fetchUpdates(); } catch (e) { console.error("Control failed", e); }
+        try { await fetch(API_BASE + endpoint); fetchUpdates(); } catch (e) { console.error("Control target failed", e); }
     }
 
     async function fetchUpdates() {
         try {
-            const logRes = await fetch('/logs');
+            const logRes = await fetch(API_BASE + '/logs');
             const logs = await logRes.json();
             const terminalEl = document.getElementById('terminal');
             
-            // Build parsed line outputs
             terminalEl.innerHTML = logs.map(l => parseAnsi(l)).join('\n');
             terminalEl.scrollTop = terminalEl.scrollHeight;
 
-            const rankRes = await fetch('/rankings');
+            const rankRes = await fetch(API_BASE + '/rankings');
             const data = await rankRes.json();
 
             const statusEl = document.getElementById('loop-status');
@@ -230,7 +227,11 @@
                 `<tr><td>${i+1}</td><td><strong>${o.name}</strong></td><td style="text-align: right;"><span class="time-badge">${o.duration}</span></td></tr>`
             ).join('') : '<tr><td colspan="3" style="color:var(--text-muted)">No metrics recorded today.</td></tr>';
 
-        } catch (e) { console.error("Update sync error", e); }
+        } catch (e) { 
+            document.getElementById('loop-status').textContent = "OFFLINE";
+            document.getElementById('loop-status').className = "loop-status status-off";
+            console.error("Local script offline", e); 
+        }
     }
 
     setInterval(fetchUpdates, 2000);

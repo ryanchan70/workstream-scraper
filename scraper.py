@@ -21,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 BASE_URL      = "https://fleet.shiftiq.us"
 PASSWORD      = "workstream"
 POLL_INTERVAL = 5          
-WEB_PORT      = 8080       # Access the UI at http://localhost:8080
+WEB_PORT      = 8080       # Access the API locally at http://localhost:8080
 
 # ANSI Color Codes
 ANSI_BRIGHT_RED   = "\033[91m"
@@ -64,11 +64,10 @@ def get_date_str():
     return datetime.datetime.now().strftime("%Y-%m-%d")
 
 def web_print(text):
-    """Intercepts terminal messages to print to console and save raw lines with ANSI sequences for the UI."""
     print(text)
     with buffer_lock:
         terminal_buffer.append(text)
-        if len(terminal_buffer) > 1000:  # Cap log size in memory
+        if len(terminal_buffer) > 1000:
             terminal_buffer.pop(0)
 
 def format_time(seconds: float) -> str:
@@ -122,7 +121,7 @@ def load_daily_totals():
                         dur = parse_duration_from_log(dur_str)
                         day_stats["total"] += dur
                         day_stats["by_pi"][label] = day_stats["by_pi"].get(label, 0) + dur
-                        day_stats["by_operator"][op] = day_stats["by_operator"].get(op, 0) + dur
+                        day_stats["by_operator"][op] = day_stats["by_operator"][op].get(op, 0) + dur
             web_print(f"[{ts()}] DEBUG  Successfully recovered history: {ANSI_LIGHT_PURPLE}{format_time(day_stats['total'])}{ANSI_RESET} fleet overall.")
         except Exception as e:
             web_print(f"[{ts()}] ERROR  Could not scan log file for history: {e}")
@@ -229,7 +228,6 @@ def log_session_end(label: str, op: str, task: str, dur: float):
             web_print(f"[{ts()}] ERROR  Could not write to {log_filename}: {e}")
 
 def log_current_totals(reason: str):
-    """Calculates live snapshots, writes them to text logs, and updates UI memory maps."""
     if global_session:
         scrape_all_device_tasks(global_session)
 
@@ -240,7 +238,6 @@ def log_current_totals(reason: str):
             
         day_stats = daily_totals[today_str]
         
-        # Read running sums + insert actively ongoing cache entries
         snap_total = day_stats["total"]
         snap_by_pi = dict(day_stats["by_pi"])
         snap_by_op = dict(day_stats["by_operator"])
@@ -253,7 +250,6 @@ def log_current_totals(reason: str):
             snap_by_pi[label] = snap_by_pi.get(label, 0) + dur
             snap_by_op[op] = snap_by_op.get(op, 0) + dur
             
-        # Push into web tracking context instantly
         day_stats["ui_live_pi"] = snap_by_pi
         day_stats["ui_live_operator"] = snap_by_op
 
@@ -351,18 +347,25 @@ def verify_on_close(session: requests.Session):
                 f.write(f"[{ts()}] ===================================================\n\n")
         except Exception: pass
 
-# ── Embedded Web UI Server Framework ─────────────────────────────────────────
+# ── Embedded API Server (With CORS Fixes) ────────────────────────────────────
 class EmbeddedUIServer(BaseHTTPRequestHandler):
     def log_message(self, format, *args): return 
     
+    def end_headers(self):
+        # Allow requests from GitHub Pages
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type')
+        super().end_headers()
+
+    def do_OPTIONS(self):
+        # Handle pre-flight checks from browser security engines
+        self.send_response(200)
+        self.end_headers()
+
     def do_GET(self):
         global loop_active
-        if self.path == '/':
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html')
-            self.end_headers()
-            with open('index.html', 'rb') as f: self.wfile.write(f.read())
-        elif self.path == '/logs':
+        if self.path == '/logs':
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
@@ -374,7 +377,6 @@ class EmbeddedUIServer(BaseHTTPRequestHandler):
             today_str = get_date_str()
             with log_lock:
                 stats = daily_totals.get(today_str, {"by_pi": {}, "by_operator": {}})
-                # Look for ui_live overrides first, then drop back to standard base logs
                 pi_source = stats.get("ui_live_pi") if "ui_live_pi" in stats else stats.get("by_pi", {})
                 op_source = stats.get("ui_live_operator") if "ui_live_operator" in stats else stats.get("by_operator", {})
                 
@@ -383,11 +385,11 @@ class EmbeddedUIServer(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"pi": pi_rank, "operator": op_rank, "active": loop_active}).encode())
         elif self.path == '/start':
             loop_active = True
-            web_print(f"[{ts()}] SYSTEM  Loop tracking manually STARTED via Frontend UI Controls.")
+            web_print(f"[{ts()}] SYSTEM  Loop tracking manually STARTED via GitHub Pages Control UI.")
             self.send_response(200); self.end_headers()
         elif self.path == '/stop':
             loop_active = False
-            web_print(f"[{ts()}] SYSTEM  {ANSI_BRIGHT_RED}Loop tracking manually STOPPED via Frontend UI Controls.{ANSI_RESET}")
+            web_print(f"[{ts()}] SYSTEM  {ANSI_BRIGHT_RED}Loop tracking manually STOPPED via GitHub Pages Control UI.{ANSI_RESET}")
             self.send_response(200); self.end_headers()
         elif self.path == '/snapshot':
             log_current_totals("Web UI Trigger")
@@ -457,7 +459,7 @@ def run():
     load_daily_totals()
     start_web_server()
     start_key_listener()
-    web_print(f"[{ts()}] SYSTEM  Web Dashboard server live on port {WEB_PORT}.")
+    web_print(f"[{ts()}] SYSTEM  CORS API endpoint layer live on port {WEB_PORT}.")
     
     prev_status: dict[str, str] = {}
     
